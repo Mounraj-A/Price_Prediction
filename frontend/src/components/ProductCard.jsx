@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Star, ExternalLink, ShoppingCart } from 'lucide-react';
 import SaveButton from './SaveButton';
 
@@ -42,12 +43,13 @@ export default function ProductCard({ product, index, isCheapest, isSaved, isSel
   ].filter(Boolean).join(' ');
 
   return (
-    <div
-      id={`card-${product.productKey}-${product.platform}`}
-      className={cardClass}
-      style={{ animationDelay: `${Math.min(index * 50, 400)}ms`, cursor: 'pointer' }}
-      onClick={onClick}
-    >
+    <>
+      <div
+        id={`card-${product.productKey}-${product.platform}`}
+        className={cardClass}
+        style={{ animationDelay: `${Math.min(index * 50, 400)}ms`, cursor: 'pointer' }}
+        onClick={onClick}
+      >
       {/* Image */}
       <div className="card-img-wrap">
         {hasImg ? (
@@ -92,7 +94,8 @@ export default function ProductCard({ product, index, isCheapest, isSaved, isSel
         )}
       </div>
     </div>
-  );
+  </>
+);
 }
 
 /* ── List Card ── */
@@ -106,11 +109,12 @@ export function ProductListCard({ product, index, isCheapest, isSaved, isSelecte
   ].filter(Boolean).join(' ');
 
   return (
-    <div
-      className={cardClass}
-      style={{ animationDelay: `${Math.min(index * 40, 300)}ms`, cursor: 'pointer' }}
-      onClick={onClick}
-    >
+    <>
+      <div
+        className={cardClass}
+        style={{ animationDelay: `${Math.min(index * 40, 300)}ms`, cursor: 'pointer' }}
+        onClick={onClick}
+      >
       <div className="list-img-wrap">
         {product.image
           ? <img src={product.image} alt={product.productName} className="list-img" onError={(e) => e.target.style.display = 'none'} />
@@ -146,7 +150,8 @@ export function ProductListCard({ product, index, isCheapest, isSaved, isSelecte
         </div>
       </div>
     </div>
-  );
+  </>
+);
 }
 
 /* ── Skeletons ── */

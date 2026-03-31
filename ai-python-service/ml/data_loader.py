@@ -1,8 +1,14 @@
-from pymongo import MongoClient
-import pandas as pd
+import os
 
-client = MongoClient("mongodb://localhost:27017/")
-db = client["test"]
+import pandas as pd
+from pymongo import MongoClient
+
+# Must match Spring Boot spring.mongodb.database (see application.properties)
+_MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+_MONGO_DB = os.getenv("MONGODB_DATABASE", "omni_price_db")
+
+client = MongoClient(_MONGO_URI)
+db = client[_MONGO_DB]
 
 
 def load_price_data(product_key):

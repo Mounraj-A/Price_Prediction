@@ -32,6 +32,19 @@ public class User {
 
     private boolean enabled;
 
+    /**
+     * Email verification status.
+     * Existing users without verification should be blocked until verified.
+     */
+    @Builder.Default
+    private Boolean emailVerified = false;
+
+    /** 6-digit OTP for email verification (cleared after verification) */
+    private String otp;
+
+    /** OTP expiry (cleared after verification) */
+    private LocalDateTime otpExpiry;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

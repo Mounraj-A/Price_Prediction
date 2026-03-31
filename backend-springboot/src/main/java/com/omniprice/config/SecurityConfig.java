@@ -68,6 +68,7 @@ public class SecurityConfig {
 
                         // Public endpoints
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/*/health", "/api/*/ping").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/predict").permitAll()
@@ -75,6 +76,7 @@ public class SecurityConfig {
 
                         // Protected endpoints - require authentication
                         .requestMatchers("/api/products/**").authenticated()
+                        .requestMatchers("/api/notifications/**").authenticated()
                         .requestMatchers("/api/user/**").authenticated()
 
                         // All other requests require authentication

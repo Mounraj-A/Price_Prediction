@@ -11,6 +11,19 @@ Spring forwards as: GET /search?product=iPhone%252015%2520Pro ❌ (DOUBLE ENCODE
 Python receives:    product = "iPhone%2015%20Pro" (percent signs as literal characters)
 Result:             "iPhone%2015%20Pro" ≠ "iPhone 15 Pro" → semantic filtering fails
 ```
+http://127.0.0.1:8000/api/search?product=Apple%20iPhone%2015%20128GB
+http://127.0.0.1:8000/api/predict?product=apple_iphone15_128gb
+http://127.0.0.1:8000/api/price-history?product=iphone%2015
+http://localhost:8080/api/products/search?product=Apple%20iPhone%2015%20128GB
+http://localhost:8080/api/products/predict?product=vivo_y295gdiamond_128gb
+http://127.0.0.1:8000/api/price-history?product=Apple%20iPhone%2015%20128GB
+http://127.0.0.1:8000/api/predict?product=vivo_y295gdiamond_128gb
+http://localhost:8080/api/products/search?product=vivo%20v29
+
+App health	http://localhost:8080/api/products/health	No
+All notifications	http://localhost:8080/api/notifications	Yes (JWT)
+Unread only	http://localhost:8080/api/notifications/unread	Yes (JWT)
+Mark one read	POST http://localhost:8080/api/notifications/read/{id}	Yes (JWT)
 
 ---
 🚀 STEP 1 — Start All Services

@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, BellOff, CheckCheck, Trash2, Bell, TrendingDown, Tag } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
-import { notificationApi } from '../services/api';
 
 const TYPE_META = {
   price_drop:  { icon: <TrendingDown size={20} />, label: 'Price Drop',  color: '#10b981', bg: 'rgba(16,185,129,0.15)' }, 
   best_deal:   { icon: <Tag size={20} />,          label: 'Best Deal',   color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' }, 
   trend_alert: { icon: <Bell size={20} />,         label: 'Trend Alert', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' }, 
+  target_price: { icon: <Tag size={20} />,        label: 'Target Price', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
 };
 
 function getTypeMeta(type) {
@@ -18,23 +18,19 @@ function getTypeMeta(type) {
 function timeAgo(timestamp, fallbackId, currentTime) {
   let timeVal = null;
 
-  // 1. Try to parse the actual timestamp string
   if (timestamp) {
     const parsed = new Date(timestamp).getTime();
     if (!isNaN(parsed) && parsed > 0) timeVal = parsed;
   }
 
-  // 2. Try the ID, but ONLY if it's a huge number (meaning it's an actual Date.now() timestamp, > year 2020)
   if (!timeVal && typeof fallbackId === 'number' && fallbackId > 1577836800000) {
     timeVal = fallbackId;
   }
 
-  // 3. If there is absolutely no valid time data, just say "Recently" instead of 56 years ago!
   if (!timeVal) return 'Recently';
 
   const diff = currentTime - timeVal;
 
-  // Prevent negative times if the clock is slightly off
   if (diff < 0) return 'Just now';
 
   const seconds = Math.floor(diff / 1000);
@@ -51,38 +47,31 @@ function timeAgo(timestamp, fallbackId, currentTime) {
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-  const { unreadCount, markAllRead } = useNotifications();
-  const [localNotifs, setLocal] = useState(notificationApi.getAll());
+  const { unreadCount, markAllRead, notifications, dismissOne, clearAllVisible } = useNotifications();
   
-  // Live ticker so times automatically update while sitting on the page
   const [currentTime, setCurrentTime] = useState(Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 30000); // Updates every 30 seconds
+    const timer = setInterval(() => setCurrentTime(Date.now()), 30000);
     return () => clearInterval(timer);
   }, []);
 
-  const removeNotif = (id) => {
-    const updated = localNotifs.filter((n) => n.id !== id);
-    localStorage.setItem('omni_notifications', JSON.stringify(updated));
-    setLocal(updated);
-  };
-
-  const clearAll = () => {
-    notificationApi.clear();
-    setLocal([]);
-  };
+  const items = notifications;
 
   const handleMarkAllRead = () => {
     markAllRead();
-    setLocal(notificationApi.getAll());
   };
 
-  const items = localNotifs;
+  const removeNotif = (id) => {
+    dismissOne(id);
+  };
+
+  const clearAll = () => {
+    clearAllVisible();
+  };
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden' }}>
       
-      {/* Top Navigation Bar */}
       <header style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
         <button 
           onClick={() => navigate('/')} 
@@ -92,11 +81,9 @@ export default function NotificationsPage() {
         </button>
       </header>
 
-      {/* Scrollable Content Area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '40px 20px' }}>
         <div style={{ maxWidth: 800, margin: '0 auto', paddingBottom: 60 }}>
           
-          {/* Header & Actions */}
           <div className="anim-fade-up" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -134,7 +121,6 @@ export default function NotificationsPage() {
             )}
           </div>
 
-          {/* Empty State */}
           {items.length === 0 ? (
             <div className="anim-fade-up stagger-1" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 24, padding: '80px 20px', textAlign: 'center' }}>
               <div style={{ width: 80, height: 80, margin: '0 auto 24px', background: 'rgba(99,102,241,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -153,7 +139,6 @@ export default function NotificationsPage() {
               </button>
             </div>
           ) : (
-            /* Notification List */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {items.map((n, i) => {
                 const meta = getTypeMeta(n.type);
@@ -176,12 +161,10 @@ export default function NotificationsPage() {
                       transition: 'opacity 0.3s ease'
                     }}
                   >
-                    {/* Unread Indicator Bar */}
                     {!n.read && (
                       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: 'var(--primary-light)' }} />
                     )}
 
-                    {/* Icon Bubble */}
                     <div style={{
                       width: 48, height: 48, borderRadius: 14,
                       background: meta.bg, color: meta.color,
@@ -191,7 +174,6 @@ export default function NotificationsPage() {
                       {meta.icon}
                     </div>
 
-                    {/* Content */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
                         <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
@@ -209,12 +191,10 @@ export default function NotificationsPage() {
                         {n.message}
                       </p>
                       <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, fontWeight: 500 }}>
-                        {/* Notice we pass the three variables here */}
-                        {timeAgo(n.timestamp, n.id, currentTime)}
+                        {timeAgo(n.timestamp || n.createdAt, n.id, currentTime)}
                       </p>
                     </div>
 
-                    {/* Remove Button */}
                     <button
                       onClick={() => removeNotif(n.id)}
                       style={{ 

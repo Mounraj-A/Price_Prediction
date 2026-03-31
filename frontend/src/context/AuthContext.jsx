@@ -60,26 +60,49 @@ export function AuthProvider({ children }) {
     try {
       setError(null);
       const response = await authApi.register(username, email, password, fullName);
-      
-      setToken(response.token);
-      setUser({
-        username: response.username,
-        email: response.email,
-        fullName: response.fullName,
-        avatar: response.avatar,
-      });
-      
-      localStorage.setItem('omni_token', response.token);
-      localStorage.setItem('omni_user', JSON.stringify({
-        username: response.username,
-        email: response.email,
-        fullName: response.fullName,
-        avatar: response.avatar,
-      }));
-      
+
+      // OTP flow: register may not return a token until verification.
+      if (response?.token) {
+        setToken(response.token);
+        setUser({
+          username: response.username,
+          email: response.email,
+          fullName: response.fullName,
+          avatar: response.avatar,
+        });
+        localStorage.setItem('omni_token', response.token);
+        localStorage.setItem('omni_user', JSON.stringify({
+          username: response.username,
+          email: response.email,
+          fullName: response.fullName,
+          avatar: response.avatar,
+        }));
+      }
       return response;
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
+  const verifyOtp = async (email, otp) => {
+    try {
+      setError(null);
+      return await authApi.verifyOtp(email, otp);
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || 'OTP verification failed';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
+  const resendOtp = async (email) => {
+    try {
+      setError(null);
+      return await authApi.resendOtp(email);
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to resend OTP';
       setError(errorMessage);
       throw new Error(errorMessage);
     }
@@ -105,6 +128,8 @@ export function AuthProvider({ children }) {
     error,
     login,
     register,
+    verifyOtp,
+    resendOtp,
     logout,
     updateUser, // Exposed to the app here
     isAuthenticated: !!token,

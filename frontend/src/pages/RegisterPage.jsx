@@ -138,8 +138,9 @@ export default function RegisterPage() {
     try { 
       // Generate username from name (remove spaces and convert to lowercase)
       const username = name.trim().toLowerCase().replace(/\s+/g, '_');
-      await register(username, email.trim(), password, name.trim());
-      navigate('/'); 
+      const res = await register(username, email.trim(), password, name.trim());
+      // New OTP flow: redirect to OTP verification (do not assume logged-in)
+      navigate('/verify-otp', { state: { email: email.trim(), message: res?.message } });
     } 
     catch (err) { setError(err.message || 'Registration failed'); } 
     finally { setLoading(false); }

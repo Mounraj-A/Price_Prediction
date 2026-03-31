@@ -4,6 +4,7 @@ import com.omniprice.model.Product;
 import com.omniprice.model.PriceHistory;
 import com.omniprice.repository.ProductRepository;
 import com.omniprice.repository.PriceHistoryRepository;
+import com.omniprice.utils.ProductKeyUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,10 +34,14 @@ public class ProductService {
     @Value("${python.ai.service.url}")
     private String pythonApiUrl;
 
+    @Value("${python.ai.predict.url}")
+    private String pythonPredictUrl;
+
     // ----------------------------
-    // SEARCH METHOD
+    // SEARCH METHOD — returns products + Python prediction (single source of truth for ML)
     // ----------------------------
-    public List<Product> searchProduct(String productName) {
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> searchProduct(String productName) {
 
         URI uri = UriComponentsBuilder
                 .fromUriString(pythonApiUrl)
@@ -46,6 +51,10 @@ public class ProductService {
                 .toUri();
 
         System.out.println("🔥 Calling FastAPI: " + uri);
+
+        Map<String, Object> empty = new HashMap<>();
+        empty.put("products", new ArrayList<Product>());
+        empty.put("prediction", new HashMap<String, Object>());
 
         try {
             ResponseEntity<Map<String, Object>> response =
@@ -57,7 +66,7 @@ public class ProductService {
                     );
 
             Map<String, Object> body = response.getBody();
-            if (body == null) return new ArrayList<>();
+            if (body == null) return empty;
 
             List<Map<String, Object>> productData =
                     (List<Map<String, Object>>) body.getOrDefault("products", new ArrayList<>());
@@ -74,11 +83,46 @@ public class ProductService {
                 savePriceHistory(products);
             }
 
-            return products;
+            Map<String, Object> out = new HashMap<>();
+            out.put("products", products);
+            out.put("prediction", prediction);
+            return out;
 
         } catch (Exception e) {
             System.err.println("❌ ERROR calling FastAPI: " + e.getMessage());
-            return new ArrayList<>();
+            return empty;
+        }
+    }
+
+    /**
+     * Calls FastAPI /predict only (no scrape). Aligns with Python resolve_product_key_from_client.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> predictProduct(String productKey, String productName, String legacyProduct) {
+        UriComponentsBuilder b = UriComponentsBuilder.fromUriString(pythonPredictUrl);
+        if (productKey != null && !productKey.isBlank()) {
+            b.queryParam("product_key", productKey.trim());
+        }
+        if (productName != null && !productName.isBlank()) {
+            b.queryParam("product_name", productName);
+        }
+        if (legacyProduct != null && !legacyProduct.isBlank()) {
+            b.queryParam("product", legacyProduct);
+        }
+        URI uri = b.build().encode().toUri();
+        System.out.println("🔮 Calling FastAPI predict: " + uri);
+        try {
+            ResponseEntity<Map<String, Object>> response =
+                    restTemplate.exchange(
+                            uri,
+                            HttpMethod.GET,
+                            null,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+            Map<String, Object> body = response.getBody();
+            return body != null ? body : new HashMap<>();
+        } catch (Exception e) {
+            System.err.println("❌ ERROR FastAPI predict: " + e.getMessage());
+            return new HashMap<>();
         }
     }
 
@@ -98,7 +142,13 @@ public class ProductService {
 
             product.setProductName(name);
             product.setNormalizedName(normalizeName(name));
-            product.setProductKey(generateProductKey(name));
+            // Prefer Python canonical key so MongoDB / ML keys stay aligned with FastAPI
+            Object pk = item.get("productKey");
+            if (pk != null && !pk.toString().isBlank()) {
+                product.setProductKey(pk.toString().trim());
+            } else {
+                product.setProductKey(generateProductKey(name));
+            }
 
             product.setPlatform(String.valueOf(item.getOrDefault("platform", "")));
             product.setBrand(String.valueOf(item.getOrDefault("brand", "")));
@@ -146,16 +196,9 @@ public class ProductService {
     }
 
     // ----------------------------
-    private String generateProductKey(String title) {
-        if (title == null) return "";
-        title = title.toLowerCase();
-
-        if (title.contains("iphone")) {
-            return title.replaceAll(".*(iphone\\s?\\d+).*", "$1").trim();
-        }
-
-        String[] words = title.split(" ");
-        return words.length >= 2 ? words[0] + " " + words[1] : title;
+    /** Same rules as Python {@code utils.product_utils.generate_product_key} */
+    public String generateProductKey(String title) {
+        return ProductKeyUtil.generateProductKey(title);
     }
 
     private String normalizeName(String name) {

@@ -2,11 +2,12 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Bookmark, Trash2, ExternalLink, ShoppingCart,
-  RefreshCw, TrendingDown, TrendingUp, Sparkles, Brain
+  RefreshCw, TrendingDown, TrendingUp, Sparkles, Brain, Bell
 } from 'lucide-react';
 import { savedApi, predictApi } from '../services/api';
 import { buildSaveKey, priceDiff } from '../utils/groupProducts';
 import Toast from '../components/Toast';
+import AlertModal from '../components/AlertModal';
 
 const PLATFORM_EMOJI = {
   flipkart: '🛒', amazon: '📦', ebay: '🔖',
@@ -20,6 +21,7 @@ export default function SavedItemsPage() {
   const [predictions, setPreds] = useState({});
   const [loadingStates, setLoadingStates] = useState({});
   const [toast, setToast] = useState(null);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, product: null });
 
   const showToast = (msg, type = 'info') => setToast({ message: msg, type, id: Date.now() });
 
@@ -176,7 +178,9 @@ export default function SavedItemsPage() {
                           
                           <div style={{ textAlign: 'right' }}>
                             {pred.trend && (
-                              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4, fontWeight: 500 }}>Trend: <strong style={{ color: 'var(--text)' }}>{pred.trend}</strong></div>
+                              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4, fontWeight: 500 }}>
+                                Trend: <strong style={{ color: 'var(--text)' }}>{typeof pred.trend === 'string' ? pred.trend : pred.trend?.trend || 'unknown'}</strong>
+                              </div>
                             )}
                             {diff && (
                               <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, color: diff.direction === 'down' ? '#10b981' : '#ef4444' }}>
@@ -200,6 +204,15 @@ export default function SavedItemsPage() {
                       >
                         <RefreshCw size={14} className={busy ? 'anim-spin' : ''} color={busy ? 'var(--text-3)' : 'var(--primary-light)'} /> 
                         {busy ? 'Analyzing...' : 'AI Re-check'}
+                      </button>
+
+                      <button
+                        onClick={() => setAlertModal({ isOpen: true, product: item })}
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text)', padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                        onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary-light)'}
+                        onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
+                      >
+                        <Bell size={14} color="var(--primary-light)" /> Set Alert
                       </button>
                       
                       {item.link && (
@@ -227,6 +240,17 @@ export default function SavedItemsPage() {
           <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToast(null)} />
         </div>
       )}
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        product={alertModal.product}
+        onClose={() => setAlertModal({ isOpen: false, product: null })}
+        onSuccess={() => {
+          setAlertModal({ isOpen: false, product: null });
+          showToast('Alert created successfully!', 'success');
+        }}
+      />
     </div>
   );
 }

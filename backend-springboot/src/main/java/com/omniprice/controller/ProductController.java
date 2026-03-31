@@ -21,45 +21,16 @@ public class ProductController {
     // SEARCH API (FINAL FIXED)
     // ----------------------------
     @GetMapping("/search")
+    @SuppressWarnings("unchecked")
     public Map<String, Object> searchProducts(@RequestParam String product) {
 
-        List<Product> products = productService.searchProduct(product);
+        Map<String, Object> result = productService.searchProduct(product);
+        List<Product> products = (List<Product>) result.getOrDefault("products", new ArrayList<>());
+        Map<String, Object> prediction = (Map<String, Object>) result.getOrDefault("prediction", new HashMap<>());
 
         Map<String, Object> response = new HashMap<>();
-
-        // ----------------------------
-        // Products
-        // ----------------------------
         response.put("products", products);
-
-        // ----------------------------
-        // 🔥 Prediction (FULL OBJECT)
-        // ----------------------------
-        Map<String, Object> prediction = new HashMap<>();
-
-        if (!products.isEmpty()) {
-
-            double predictedPrice = products.get(0).getPredictedPrice();
-            double currentPrice = products.get(0).getPrice();
-
-            prediction.put("currentPrice", currentPrice);
-            prediction.put("predictedPrice", predictedPrice);
-
-            // Trend logic
-            if (predictedPrice < currentPrice) {
-                prediction.put("trend", "falling");
-            } else if (predictedPrice > currentPrice) {
-                prediction.put("trend", "rising");
-            } else {
-                prediction.put("trend", "stable");
-            }
-
-        } else {
-            prediction.put("currentPrice", 0);
-            prediction.put("predictedPrice", 0);
-            prediction.put("trend", "unknown");
-        }
-
+        // FastAPI is the source of truth for trend / deal / notifications / cacheHit
         response.put("prediction", prediction);
 
         return response;
@@ -69,20 +40,12 @@ public class ProductController {
     // OPTIONAL: DIRECT PREDICT API
     // ----------------------------
     @GetMapping("/predict")
-    public Map<String, Object> predict(@RequestParam String product) {
+    public Map<String, Object> predict(
+            @RequestParam(required = false) String product_key,
+            @RequestParam(required = false) String product_name,
+            @RequestParam(required = false) String product) {
 
-        // This calls Python directly via service (optional)
-        List<Product> products = productService.searchProduct(product);
-
-        Map<String, Object> response = new HashMap<>();
-
-        if (!products.isEmpty()) {
-            response.put("predictedPrice", products.get(0).getPredictedPrice());
-        } else {
-            response.put("predictedPrice", 0);
-        }
-
-        return response;
+        return productService.predictProduct(product_key, product_name, product);
     }
 
     // ----------------------------
@@ -97,12 +60,21 @@ public class ProductController {
     // 🔥 PRICE HISTORY API (FIXED)
     // ----------------------------
 @GetMapping("/price-history")
-public List<Map<String, Object>> getPriceHistory(@RequestParam String product) {
+public List<Map<String, Object>> getPriceHistory(
+        @RequestParam(required = false) String product_key,
+        @RequestParam(required = false) String product_name,
+        @RequestParam(required = false) String product) {
 
-    // 🔥 convert query → productKey
-    String productKey = product.toLowerCase().contains("iphone")
-            ? product.toLowerCase().replaceAll(".*(iphone\\s?\\d+).*", "$1").trim()
-            : product.toLowerCase();
+    String productKey;
+    if (product_key != null && !product_key.isBlank()) {
+        productKey = product_key.trim();
+    } else {
+        String raw = (product_name != null && !product_name.isBlank()) ? product_name : product;
+        if (raw == null || raw.isBlank()) {
+            return new ArrayList<>();
+        }
+        productKey = productService.generateProductKey(raw);
+    }
 
     List<PriceHistory> historyList =
             productService.getPriceHistoryByKey(productKey);

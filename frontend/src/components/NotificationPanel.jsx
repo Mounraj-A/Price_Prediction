@@ -38,7 +38,7 @@ function timeAgo(timestamp, fallbackId, currentTime) {
 }
 
 export default function NotificationPanel({ isOpen, onToggle }) {
-  const { notifications, unreadCount, markAllRead } = useNotifications();
+  const { notifications, unreadCount, markAllRead, markOneRead } = useNotifications();
   const panelRef = useRef(null);
   
   // Live ticker so times automatically update while dropdown is open
@@ -114,11 +114,19 @@ export default function NotificationPanel({ isOpen, onToggle }) {
               </div>
             ) : (
               notifications.map((notif, i) => (
-                <div key={notif.id || i} style={{ 
+                <div
+                  key={notif.id || i}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => notif.id && markOneRead(notif.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && notif.id && markOneRead(notif.id)}
+                  style={{ 
                   padding: '16px 20px', borderBottom: '1px solid var(--border)',
                   background: notif.read ? 'transparent' : 'rgba(99,102,241,0.05)',
-                  display: 'flex', gap: 12, alignItems: 'flex-start'
-                }}>
+                  display: 'flex', gap: 12, alignItems: 'flex-start',
+                  cursor: notif.read ? 'default' : 'pointer'
+                }}
+                >
                   <div style={{ 
                     width: 32, height: 32, borderRadius: 8, flexShrink: 0,
                     background: notif.type === 'price_drop' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
@@ -134,7 +142,7 @@ export default function NotificationPanel({ isOpen, onToggle }) {
                     </p>
                     <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
                       {/* Using the new timeAgo with the required variables */}
-                      {timeAgo(notif.timestamp, notif.id, currentTime)}
+                      {timeAgo(notif.timestamp || notif.createdAt, notif.id, currentTime)}
                     </span>
                   </div>
 

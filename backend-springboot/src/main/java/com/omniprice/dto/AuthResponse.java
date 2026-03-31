@@ -17,4 +17,6 @@ public class AuthResponse {
     private String fullName;
     private String avatar;
     private LocalDateTime createdAt;
+    private Boolean emailVerified;
+    private String message;
 }

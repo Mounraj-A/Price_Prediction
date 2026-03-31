@@ -1,8 +1,15 @@
 from fastapi import APIRouter
 import time
-import re
 import urllib.parse
 import sys
+from typing import Optional
+
+from utils.product_utils import (
+    ensure_product_attributes_from_listing,
+    normalize_name,
+    resolve_canonical_product_key,
+    resolve_product_key_from_client,
+)
 
 # ----------------------------
 # SAFE SCRAPERS
@@ -31,32 +38,6 @@ except:
         return {"predictedPrice": 0, "message": "ML not available"}
 
 router = APIRouter()
-
-# ----------------------------
-# NORMALIZE
-# ----------------------------
-def normalize_name(name):
-    return re.sub(r'[^a-z0-9 ]', '', name.lower()).strip() if name else ""
-
-# ----------------------------
-# PRODUCT KEY
-# ----------------------------
-def generate_product_key(title):
-    if not title:
-        return ""
-
-    title = title.lower()
-
-    match = re.search(r'(iphone\s*\d+)', title)
-    if match:
-        return match.group(1).strip()
-
-    match = re.search(r'(samsung\s+galaxy\s+[a-z0-9]+)', title)
-    if match:
-        return match.group(1).strip()
-
-    words = title.split()
-    return " ".join(words[:2]) if len(words) >= 2 else title
 
 # ----------------------------
 # REMOVE DUPLICATES (KEEP BOTH PLATFORMS)
@@ -137,10 +118,10 @@ def search_products(product: str):
             all_products = []
 
         # ----------------------------
-        # ADD productKey
+        # productKey + normalizedName — only from listing productName (product_utils)
         # ----------------------------
         for p in all_products:
-            p["productKey"] = generate_product_key(p.get("productName"))
+            ensure_product_attributes_from_listing(p)
 
         print("🔑 Product keys added")
         sys.stdout.flush()
@@ -162,9 +143,9 @@ def search_products(product: str):
         sys.stdout.flush()
 
         # ----------------------------
-        # ML PREDICTION
+        # ML PREDICTION — key from top listing only (never from search query)
         # ----------------------------
-        product_key = generate_product_key(decoded_product)
+        product_key = resolve_canonical_product_key(ranked_products)
 
         try:
             prediction = get_price_prediction(product_key)
@@ -202,13 +183,31 @@ def search_products(product: str):
 # PREDICT API
 # ----------------------------
 @router.get("/predict")
-def predict(product: str):
+def predict(
+    product_key: Optional[str] = None,
+    product_name: Optional[str] = None,
+    product: Optional[str] = None,
+):
+    """
+    product_key: use as-is (preferred if client already has it).
+    product_name: full listing title — key is derived via generate_product_key only in product_utils.
+    product: legacy alias for product_name (listing title, not search keyword).
+    """
+    key = resolve_product_key_from_client(
+        explicit_key=product_key,
+        product_name=product_name,
+        legacy_product=product,
+    )
 
-    decoded = urllib.parse.unquote(product)
-    key = generate_product_key(decoded)
-
-    print("🔮 Predict request:", key)
+    print("🔮 Predict request key:", key or "(empty)")
     sys.stdout.flush()
+
+    if not key:
+        return {
+            "predictedPrice": 0,
+            "productKey": "",
+            "message": "Provide product_key or product_name (full listing title)",
+        }
 
     try:
         return get_price_prediction(key)

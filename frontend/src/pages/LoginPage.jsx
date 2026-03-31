@@ -118,7 +118,7 @@ export default function LoginPage() {
   const [typedText, setTypedText] = useState('');
   const [showCursor, setShowCursor] = useState(true);
 
-  const { login }               = useAuth();
+  const { login, resendOtp }    = useAuth();
   const navigate                = useNavigate();
 
   useEffect(() => {
@@ -137,6 +137,16 @@ export default function LoginPage() {
     try { await login(email.trim(), password); navigate('/'); } 
     catch (err) { setError(err.message || 'Invalid credentials'); } 
     finally { setLoading(false); }
+  };
+
+  const showResend = (error || '').toLowerCase().includes('email not verified');
+  const handleResend = async () => {
+    try {
+      await resendOtp(email.trim());
+      navigate('/verify-otp', { state: { email: email.trim() } });
+    } catch (e) {
+      setError(e.message || 'Failed to resend OTP');
+    }
   };
 
   return (
@@ -176,7 +186,22 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {error && <div className="auth-error" style={{ marginBottom: 20 }}><span>⚠️</span> {error}</div>}
+        {error && (
+          <div className="auth-error" style={{ marginBottom: 20 }}>
+            <span>⚠️</span> {error}
+            {showResend && (
+              <div style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  style={{ background: 'none', border: 'none', color: 'var(--primary-light)', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                >
+                  Resend OTP / Verify Email →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <form className="auth-form" onSubmit={submit}>
           <div className="form-group" style={{ marginBottom: 20 }}>

@@ -66,6 +66,16 @@ export const authApi = {
     return response.data;
   },
 
+  verifyOtp: async (email, otp) => {
+    const response = await authAxios.post("/verify-otp", { email, otp });
+    return response.data;
+  },
+
+  resendOtp: async (email) => {
+    const response = await authAxios.post("/resend-otp", { email });
+    return response.data;
+  },
+
   validateToken: async (token) => {
     const config = { headers: { Authorization: `Bearer ${token}` } };
     const response = await authAxios.get("/validate", config);
@@ -85,16 +95,39 @@ export const searchApi = {
    🤖 PREDICTION API
 ------------------------------------------------------- */
 export const predictApi = {
-  predict: (query) =>
-    api.get("/predict", { params: { product: query } }).then((r) => r.data),
+  /**
+   * @param {string | { productKey?: string, productName?: string }} queryOrOpts
+   * Prefer productKey / productName from a listing; legacy string maps to `product` (listing title).
+   */
+  predict: (queryOrOpts) => {
+    const params =
+      typeof queryOrOpts === "string"
+        ? { product: queryOrOpts }
+        : {
+            ...(queryOrOpts?.productKey && { product_key: queryOrOpts.productKey }),
+            ...(queryOrOpts?.productName && { product_name: queryOrOpts.productName }),
+          };
+    return api.get("/predict", { params }).then((r) => r.data);
+  },
 };
 
 /* -------------------------------------------------------
    📊 PRICE HISTORY API
 ------------------------------------------------------- */
 export const historyApi = {
-  getHistory: (query) =>
-    api.get("/price-history", { params: { product: query } }).then((r) => r.data),
+  /**
+   * @param {string | { productKey?: string, productName?: string }} queryOrOpts
+   */
+  getHistory: (queryOrOpts) => {
+    const params =
+      typeof queryOrOpts === "string"
+        ? { product: queryOrOpts }
+        : {
+            ...(queryOrOpts?.productKey && { product_key: queryOrOpts.productKey }),
+            ...(queryOrOpts?.productName && { product_name: queryOrOpts.productName }),
+          };
+    return api.get("/price-history", { params }).then((r) => r.data);
+  },
 };
 
 /* -------------------------------------------------------
@@ -225,4 +258,48 @@ export const notificationApi = {
   },
 
   clear: () => localStorage.removeItem("omni_notifications"),
+};
+
+/* -------------------------------------------------------
+   🔔 ALERTS API (Price Alerts)
+------------------------------------------------------- */
+const alertsAxios = axios.create({
+  baseURL: "http://localhost:8080/api/alerts",
+  timeout: 10000,
+});
+
+alertsAxios.interceptors.request.use((config) => {
+  const token = localStorage.getItem("omni_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const alertApi = {
+  create: async (productKey, productName, targetPrice) => {
+    const response = await alertsAxios.post("", {
+      productKey,
+      productName,
+      targetPrice,
+    });
+    return response.data;
+  },
+
+  getAll: async () => {
+    const response = await alertsAxios.get("");
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  update: async (alertId, targetPrice) => {
+    const response = await alertsAxios.put(`/${alertId}`, {
+      targetPrice,
+    });
+    return response.data;
+  },
+
+  delete: async (alertId) => {
+    const response = await alertsAxios.delete(`/${alertId}`);
+    return response.data;
+  },
 };

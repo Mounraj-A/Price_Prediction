@@ -218,8 +218,13 @@ export default function HomePage() {
     setShowHistory(true);
     setHistoryLoading(true);
     try {
-      const hist = await historyApi.getHistory(query);
-      setPriceHistory(Array.isArray(hist) ? hist : []);
+      const hist = await historyApi.getHistory(
+        selectedProduct
+          ? { productKey: selectedProduct.productKey, productName: selectedProduct.productName }
+          : query
+      );
+      const list = Array.isArray(hist) ? hist : (hist?.data && Array.isArray(hist.data) ? hist.data : []);
+      setPriceHistory(list);
     } catch {
       showToast('Could not load price history.', 'error');
       setPriceHistory([]);
@@ -230,10 +235,14 @@ export default function HomePage() {
 
   /* ── Refresh Prediction ── */
   const handleRefreshPrediction = async () => {
-    if (!query) return;
+    if (!query && !selectedProduct) return;
     setAiLoading(true);
     try {
-      const pred = await predictApi.predict(query);
+      const pred = await predictApi.predict(
+        selectedProduct
+          ? { productKey: selectedProduct.productKey, productName: selectedProduct.productName }
+          : query
+      );
       setPrediction(pred);
     } catch {
       showToast('Could not refresh AI prediction.', 'error');
