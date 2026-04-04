@@ -1,4 +1,5 @@
 import os
+import re
 
 import pandas as pd
 from pymongo import MongoClient
@@ -12,8 +13,22 @@ db = client[_MONGO_DB]
 
 
 def load_price_data(product_key):
+    product_key = (product_key or "").strip()
+    if not product_key:
+        return pd.DataFrame()
 
     data = list(db["price_history"].find({"productKey": product_key}))
+
+    # Back-compat: legacy keys sometimes included RAM: brand_model_8gb_128gb
+    if not data:
+        parts = product_key.split("_")
+        if len(parts) >= 3 and parts[-1].lower().endswith(("gb", "tb")):
+            brand = parts[0]
+            model = parts[1]
+            storage = parts[-1]
+            # Match either brand_model_storage or brand_model_<ram>_storage
+            rx = rf"^{re.escape(brand)}_{re.escape(model)}(?:_\d+gb)?_{re.escape(storage)}$"
+            data = list(db["price_history"].find({"productKey": {"$regex": rx}}))
 
     df = pd.DataFrame(data)
 

@@ -24,11 +24,42 @@ public final class ProductKeyUtil {
             "\\b(32|64|128|256|512|1024)\\s*(?:gb|g)\\b(?!\\s*(?:ram|ddr|memory))",
             Pattern.CASE_INSENSITIVE);
 
-    private static final Set<String> COLOR_WORDS = new HashSet<>(Arrays.asList(
+        private static final Pattern RAM_GB = Pattern.compile(
+            "\\b(2|3|4|6|8|12|16|24|32|48|64)\\s*(?:gb|g)\\s*(?:ram|ddr|memory)\\b",
+            Pattern.CASE_INSENSITIVE);
+
+        // Prefer compact model tokens like: m56, s23, a15, z11x, pixel9a, edge60, nordce5, iphone16e
+        private static final Pattern MODEL_TOKEN = Pattern.compile(
+            "\\b([a-z]{1,10}\\d{1,4}[a-z]{0,6})\\b",
+            Pattern.CASE_INSENSITIVE);
+        private static final Pattern MODEL_WORD_PLUS_NUMBER = Pattern.compile(
+            "\\b([a-z]{2,20})\\s*(\\d{1,4}[a-z]{0,3})\\b",
+            Pattern.CASE_INSENSITIVE);
+
+        private static final Pattern APPLE_IPHONE = Pattern.compile(
+            "\\biphone\\s*(\\d{1,2})\\s*(pro\\s*max|pro|max|plus|mini|e|se)?\\b",
+            Pattern.CASE_INSENSITIVE);
+        private static final Pattern APPLE_IPAD = Pattern.compile(
+            "\\bipad\\s*(pro|air|mini)?\\s*(\\d{1,2})?\\b",
+            Pattern.CASE_INSENSITIVE);
+        private static final Pattern APPLE_MACBOOK = Pattern.compile(
+            "\\bmacbook\\s*(air|pro)?\\b",
+            Pattern.CASE_INSENSITIVE);
+
+        // Multi-word colors / finishes first (strip phrases before stripping words)
+        private static final Set<String> COLOR_TERMS = new HashSet<>(Arrays.asList(
+            "space gray", "space grey", "midnight black", "phantom black",
+            "natural titanium", "desert titanium", "rose gold", "product red",
+            "sierra blue", "deep purple"));
+
+        private static final Set<String> COLOR_WORDS = new HashSet<>(Arrays.asList(
             "black", "white", "blue", "green", "red", "pink", "gold", "silver", "purple",
             "lavender", "yellow", "orange", "brown", "beige", "cream", "coral", "grey", "gray",
             "charcoal", "bronze", "copper", "navy", "teal", "mint", "burgundy", "titanium",
-            "midnight", "starlight", "graphite", "phantom", "mystic", "obsidian"));
+            "midnight", "starlight", "graphite", "phantom", "mystic", "obsidian",
+            "lime", "maroon", "sand", "pearl", "ceramic", "cloud", "sunrise", "dawn", "dusk",
+            "aqua", "frost", "ice", "jet", "onyx", "slate", "stone", "tan", "wine",
+            "volcanic", "arctic", "glacier"));
 
     private static final Set<String> MARKETING = new HashSet<>(Arrays.asList(
             "new", "latest", "original", "authentic", "genuine", "buy", "online", "india", "indian",
@@ -38,45 +69,235 @@ public final class ProductKeyUtil {
             "cellular", "dual", "sim", "esim", "unlocked", "factory", "sealed", "box", "retail",
             "best", "price", "stock", "ready", "ship", "fast"));
 
-    private static final Set<String> KNOWN_BRANDS = new HashSet<>(Arrays.asList(
-            "apple", "samsung", "google", "xiaomi", "redmi", "poco", "realme", "oppo", "vivo",
-            "oneplus", "motorola", "nothing", "honor", "asus", "nokia", "sony", "lg", "htc"));
+        // Extra marketing/spec noise to strip for canonical matching.
+    private static final Set<String> MARKETING_EXTRA = new HashSet<>(Arrays.asList(
+            "camera", "cameras", "mp", "rear", "front", "selfie",
+            "gaming", "game", "lag", "lagfree", "esports",
+            "slim", "thin", "lightweight",
+            "display", "screen", "inch", "hz", "amoled", "oled", "lcd", "fhd", "uhd", "hdr",
+            "battery", "mah", "charging", "charger", "fastcharge", "supervooc", "vooc", "turbo",
+            "processor", "chip", "chipset", "snapdragon", "dimensity", "mediatek", "helio", "exynos",
+            "storage", "rom", "memory",
+            "wifi", "bluetooth", "5g", "4g", "lte", "dual",
+            "with", "without"));
 
-    public static String generateProductKey(String title) {
-        if (title == null || title.isBlank()) {
+        private static final Set<String> KNOWN_BRANDS = new HashSet<>(Arrays.asList(
+            "apple", "samsung", "google", "xiaomi", "redmi", "poco", "realme", "oppo", "vivo",
+            "oneplus", "motorola", "nothing", "honor", "asus", "nokia", "sony", "lg", "htc",
+            // laptops
+            "hp", "dell", "lenovo", "acer", "msi", "gigabyte", "microsoft"));
+
+    /**
+     * Canonical cross-platform matching key.
+     *
+     * Goal: same real-world product from different platforms yields the same key,
+     * even when listing titles include heavy marketing/spec text.
+     *
+    * Format: brand_model[_storage]
+    * Example: "Samsung Galaxy M56 5G 8GB 128GB" -> "samsung_m56_128gb"
+     */
+    public static String generateStandardProductKey(String titleOrKey) {
+        if (titleOrKey == null || titleOrKey.isBlank()) {
             return "";
         }
 
-        String s = normalizeKeyInput(title);
-        StorageResult sr = extractStorage(s);
-        s = sr.rest;
+        String s = normalizeKeyInput(titleOrKey);
+
+        // Extract storage + RAM first (then strip out those spans).
+        StorageResult storage = extractStorage(s);
+        s = storage.rest;
+        s = extractRam(s);
+
+        // Remove colors + marketing noise.
         s = stripColors(s);
         s = stripMarketing(s);
-        BrandModel bm = inferBrandAndModel(s);
-        String brandC = compact(bm.brand);
-        String modelC = compact(bm.modelRest);
+        s = stripMarketingExtra(s);
 
-        if (brandC.isEmpty() && !modelC.isEmpty()) {
-            modelC = compact(s);
+        // Brand + model
+        BrandModel bm = inferBrandAndModel(s);
+        String brand = compact(bm.brand);
+
+        String model = compact(extractModelToken(bm.modelRest, bm.brand));
+        if (model.isEmpty()) {
+            model = compact(extractModelToken(s, bm.brand));
+        }
+        if (model.isEmpty()) {
+            model = compact(fallbackModelToken(bm.modelRest, bm.brand));
+        }
+        if (model.isEmpty()) {
+            model = compact(fallbackModelToken(s, bm.brand));
+        }
+
+        if (brand.isEmpty() && model.isEmpty()) {
+            return compact(s);
+        }
+        if (brand.isEmpty()) {
+            return model;
+        }
+        if (model.isEmpty() || model.equals(brand)) {
+            // Brand-only query or failed model extraction: avoid brand_brand keys.
+            return brand;
         }
 
         StringBuilder key = new StringBuilder();
-        if (!brandC.isEmpty()) {
-            key.append(brandC);
-        }
-        if (!modelC.isEmpty()) {
-            if (key.length() > 0) {
-                key.append('_');
-            }
-            key.append(modelC);
-        }
-        if (key.length() == 0) {
-            return compact(s);
-        }
-        if (sr.token != null) {
-            key.append('_').append(sr.token);
+        key.append(brand).append('_').append(model);
+        // IMPORTANT: RAM is intentionally NOT part of the canonical key.
+        // Listings inconsistently include RAM text; including it creates duplicates.
+        if (storage.token != null) {
+            key.append('_').append(storage.token);
         }
         return key.toString();
+    }
+
+    private static String fallbackModelToken(String cleanedText, String brand) {
+        if (cleanedText == null || cleanedText.isBlank()) {
+            return "";
+        }
+
+        String s = normalizeKeyInput(cleanedText);
+        if (s.isBlank()) {
+            return "";
+        }
+
+        String b = compact(brand);
+        String[] parts = s.split("\\s+");
+
+        // Prefer tokens containing digits (often model numbers).
+        String best = "";
+        for (String p : parts) {
+            String tc = compact(p);
+            if (tc.isBlank()) {
+                continue;
+            }
+            if (!b.isBlank() && tc.equals(b)) {
+                continue;
+            }
+            if (MARKETING.contains(tc) || MARKETING_EXTRA.contains(tc) || COLOR_WORDS.contains(tc)) {
+                continue;
+            }
+            if (tc.matches("\\d+(gb|tb)") || tc.equals("gb") || tc.equals("tb")) {
+                continue;
+            }
+            if (tc.chars().anyMatch(Character::isDigit)) {
+                return tc;
+            }
+            if (best.isBlank()) {
+                best = tc;
+            }
+        }
+
+        return best;
+    }
+
+    public static String generateProductKey(String title) {
+        // Keep one canonical algorithm to avoid Java/Python drift.
+        return generateStandardProductKey(title);
+    }
+
+    private static String extractRam(String text) {
+        Matcher m = RAM_GB.matcher(text);
+        if (m.find()) {
+            return removeSpan(text, m.start(), m.end());
+        }
+        return text;
+    }
+
+    private static String stripMarketingExtra(String s) {
+        String text = " " + s + " ";
+        for (String w : MARKETING_EXTRA) {
+            text = text.replaceAll("(?i)\\b" + Pattern.quote(w) + "\\b", " ");
+        }
+        return SPACES.matcher(text).replaceAll(" ").trim();
+    }
+
+    private static String extractModelToken(String text, String brand) {
+        if (text == null) {
+            return "";
+        }
+        String s = normalizeKeyInput(text);
+
+        // Apple: prioritize product family.
+        Matcher mi = APPLE_IPHONE.matcher(s);
+        if (mi.find()) {
+            String num = mi.group(1);
+            String suf = mi.group(2);
+            String suffix = suf != null ? suf.toLowerCase(Locale.ROOT).replaceAll("\\s+", "") : "";
+            return "iphone" + num + suffix;
+        }
+        Matcher mip = APPLE_IPAD.matcher(s);
+        if (mip.find()) {
+            String variant = mip.group(1);
+            String gen = mip.group(2);
+            StringBuilder out = new StringBuilder("ipad");
+            if (variant != null && !variant.isBlank()) {
+                out.append(variant.toLowerCase(Locale.ROOT));
+            }
+            if (gen != null && !gen.isBlank()) {
+                out.append(gen);
+            }
+            return out.toString();
+        }
+        Matcher mm = APPLE_MACBOOK.matcher(s);
+        if (mm.find()) {
+            String variant = mm.group(1);
+            return "macbook" + (variant != null ? variant.toLowerCase(Locale.ROOT) : "");
+        }
+
+        // Remove common family words that should not dominate model.
+        String core = s;
+        for (String w : Arrays.asList("galaxy", "iphone", "ipad", "macbook", "mobile", "smartphone", "laptop", "notebook")) {
+            core = core.replaceAll("(?i)\\b" + Pattern.quote(w) + "\\b", " ");
+        }
+        core = SPACES.matcher(core).replaceAll(" ").trim();
+
+        // Prefer brand-specific known patterns.
+        String b = (brand == null ? "" : brand.toLowerCase(Locale.ROOT));
+        if (b.equals("samsung")) {
+            // e.g. m56, s23, a15, f55, zfold6, zflip6
+            String collapsed = core.replaceAll("\\s+", "");
+            Matcher mt = Pattern.compile("\\b([asfmz]\\d{1,3}[a-z]{0,6})\\b", Pattern.CASE_INSENSITIVE).matcher(core);
+            if (mt.find()) {
+                return mt.group(1);
+            }
+            Matcher zf = Pattern.compile("\\bz\\s*(fold|flip)\\s*(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE).matcher(s);
+            if (zf.find()) {
+                return "z" + zf.group(1).toLowerCase(Locale.ROOT) + zf.group(2);
+            }
+            if (collapsed.contains("s") && collapsed.matches(".*s\\d{1,3}.*")) {
+                // fallback to generic below
+            }
+        }
+
+        // 2-token pattern like "edge 60" => edge60, "pixel 9a" => pixel9a, "inspiron 15" => inspiron15
+        Matcher mw = MODEL_WORD_PLUS_NUMBER.matcher(core);
+        if (mw.find()) {
+            String w = mw.group(1);
+            String n = mw.group(2);
+            // Skip if word is clearly noise.
+            if (!MARKETING.contains(w.toLowerCase(Locale.ROOT)) && !MARKETING_EXTRA.contains(w.toLowerCase(Locale.ROOT))) {
+                return w + n;
+            }
+        }
+
+        // Single token like z11x / m56 / ce5 / x300
+        Matcher m = MODEL_TOKEN.matcher(core);
+        while (m.find()) {
+            String tok = m.group(1);
+            String tl = tok.toLowerCase(Locale.ROOT);
+            if (tl.length() < 2) {
+                continue;
+            }
+            if (MARKETING.contains(tl) || MARKETING_EXTRA.contains(tl) || COLOR_WORDS.contains(tl)) {
+                continue;
+            }
+            // Avoid picking storage/ram artifacts.
+            if (tl.endsWith("gb") || tl.endsWith("tb")) {
+                continue;
+            }
+            return tok;
+        }
+
+        return "";
     }
 
     private static String normalizeKeyInput(String title) {
@@ -115,9 +336,18 @@ public final class ProductKeyUtil {
     }
 
     private static String stripColors(String s) {
+        String text = " " + s + " ";
+
+        // Phrases first
+        String[] phrases = COLOR_TERMS.toArray(new String[0]);
+        Arrays.sort(phrases, Comparator.comparingInt(String::length).reversed());
+        for (String p : phrases) {
+            text = text.replaceAll("(?i)\\b" + Pattern.quote(p) + "\\b", " ");
+        }
+
+        // Then words
         String[] words = COLOR_WORDS.toArray(new String[0]);
         Arrays.sort(words, Comparator.comparingInt(String::length).reversed());
-        String text = " " + s + " ";
         for (String w : words) {
             text = text.replaceAll("(?i)\\b" + Pattern.quote(w) + "\\b", " ");
         }

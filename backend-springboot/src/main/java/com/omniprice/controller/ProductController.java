@@ -3,6 +3,7 @@ package com.omniprice.controller;
 import com.omniprice.model.PriceHistory;
 import com.omniprice.model.Product;
 import com.omniprice.service.ProductService;
+import com.omniprice.utils.ProductKeyUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -45,7 +46,21 @@ public class ProductController {
             @RequestParam(required = false) String product_name,
             @RequestParam(required = false) String product) {
 
-        return productService.predictProduct(product_key, product_name, product);
+        // Keep public API the same, but internally ensure prediction uses canonical productKey.
+        String key = (product_key != null) ? product_key.trim() : "";
+        if (key.isBlank()) {
+            String raw = (product_name != null && !product_name.isBlank()) ? product_name : product;
+            if (raw != null && !raw.isBlank()) {
+                key = ProductKeyUtil.generateStandardProductKey(raw);
+            }
+        }
+
+        if (key.isBlank()) {
+            return new HashMap<>();
+        }
+
+        // Only pass productKey (do not pass raw product title).
+        return productService.predictProduct(key, null, null);
     }
 
     // ----------------------------

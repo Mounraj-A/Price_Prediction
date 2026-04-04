@@ -6,7 +6,7 @@ from ml.deal_detection import detect_deal
 from ml.notification_engine import generate_notification
 from ml.trend_analysis import analyze_trend
 from utils.prediction_cache import get_prediction_cache
-from utils.product_utils import generate_product_key
+from utils.product_utils import generate_standard_product_key
 
 # ----------------------------
 # Feature Engineering
@@ -101,7 +101,7 @@ def get_price_prediction_for_product_name(product_name: str, use_cache: bool = T
     Listing title → key via generate_product_key (utils.product_utils) only.
     Use when you have a productName string and no precomputed key.
     """
-    key = generate_product_key((product_name or "").strip())
+    key = generate_standard_product_key((product_name or "").strip())
     return get_price_prediction(key, use_cache)
 
 

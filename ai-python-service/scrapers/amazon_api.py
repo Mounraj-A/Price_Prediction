@@ -1,15 +1,15 @@
 import requests
 import re
+import json
 from difflib import SequenceMatcher
 
 from utils.product_utils import (
     normalize_name,
-    generate_product_key,
+    generate_standard_product_key,
     extract_brand,
-    is_valid_product
 )
 
-RAPID_API_KEY = "886af5408cmshda39eecf08870c8p13ec43jsn3c5bf409054a"
+RAPID_API_KEY = "69b211ff11mshda2a2b674b3ce87p1f233ajsn3102913a2603"
 
 
 # ----------------------------
@@ -91,6 +91,12 @@ def fetch_amazon_products(product):
 
         print("🔍 Amazon Status:", response.status_code)
 
+        # Debug raw response (truncate to avoid huge logs)
+        try:
+            print("🧾 Amazon raw JSON (truncated):", json.dumps(response.json())[:2000])
+        except Exception:
+            print("🧾 Amazon raw text (truncated):", (response.text or "")[:2000])
+
         if response.status_code != 200:
             print("❌ API Error:", response.text)
             return []
@@ -105,53 +111,55 @@ def fetch_amazon_products(product):
 
         products = []
 
-        for item in items[:20]:
+        for item in items[:50]:
 
-            title = item.get("product_title")
+            # Flexible field mapping
+            title = (item.get("title")
+                     or item.get("product_title")
+                     or item.get("productTitle")
+                     or "")
+            title = str(title).strip()
 
-            raw_price = (
-                item.get("product_price")
-                or item.get("price")
-                or item.get("product_original_price")
-            )
+            raw_price = (item.get("price")
+                         or item.get("product_price")
+                         or item.get("productPrice")
+                         or item.get("product_original_price")
+                         or item.get("original_price")
+                         or "")
 
-            if not title or not raw_price:
+            link = (item.get("link")
+                    or item.get("product_url")
+                    or item.get("productUrl")
+                    or item.get("url")
+                    or "")
+
+            image = (item.get("image")
+                     or item.get("product_photo")
+                     or item.get("productPhoto")
+                     or item.get("product_image")
+                     or "")
+
+            # Do NOT over-filter. Collect all items with at least a title.
+            if not title:
                 continue
 
-            # ----------------------------
-            # 🔥 BASIC FILTER
-            # ----------------------------
-            if not is_valid_product(title):
-                continue
-
-            # ----------------------------
-            # 🔥 NLP FILTER (MAIN FIX)
-            # ----------------------------
-            if not is_relevant_product(title, product):
-                continue
-
-            # ----------------------------
-            # PRICE CLEAN
-            # ----------------------------
+            # Safe price (do not skip if parse fails)
             price = parse_price(raw_price)
 
-            if price < 10000 or price > 200000:
-                continue
-
             products.append({
-                "productName": title.strip(),
+                "productName": title,
                 "normalizedName": normalize_name(title),
-                "productKey": generate_product_key(title),
+                "productKey": generate_standard_product_key(title),
 
-                "platform": "Amazon",
+                "platform": "amazon",
                 "price": price,
-                "rating": safe_float(item.get("product_star_rating", 0)),
+                "rating": safe_float(item.get("rating") or item.get("product_star_rating") or 0),
 
                 "brand": extract_brand(title),
-                "offer": item.get("product_num_ratings", ""),
+                "offer": item.get("offer") or item.get("product_num_ratings") or "",
 
-                "link": item.get("product_url"),
-                "image": item.get("product_photo")
+                "link": link,
+                "image": image,
             })
 
         print(f"✅ Amazon filtered products: {len(products)}")

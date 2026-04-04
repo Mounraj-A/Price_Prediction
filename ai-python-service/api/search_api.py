@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 import time
 import urllib.parse
 import sys
@@ -72,7 +72,9 @@ def rank_products(products):
         price = p.get("price", 0)
         rating = p.get("rating", 0)
 
-        return (rating * 2) - (price / 10000)
+        # Unknown price should not outrank real listings.
+        effective_price = price if isinstance(price, (int, float)) and price > 0 else 1_000_000_000
+        return (rating * 2) - (effective_price / 10000)
 
     return sorted(products, key=score, reverse=True)
 
@@ -185,6 +187,7 @@ def search_products(product: str):
 @router.get("/predict")
 def predict(
     product_key: Optional[str] = None,
+    productKey: Optional[str] = Query(None),
     product_name: Optional[str] = None,
     product: Optional[str] = None,
 ):
@@ -193,8 +196,9 @@ def predict(
     product_name: full listing title — key is derived via generate_product_key only in product_utils.
     product: legacy alias for product_name (listing title, not search keyword).
     """
+    effective_key = (product_key or "").strip() or (productKey or "").strip() or None
     key = resolve_product_key_from_client(
-        explicit_key=product_key,
+        explicit_key=effective_key,
         product_name=product_name,
         legacy_product=product,
     )
